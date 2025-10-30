@@ -50,25 +50,39 @@ app.use(helmet({
 
 
 // CORS configuration for production
+const allowedOrigins = [
+  'https://comcat-frontend-qokb.vercel.app',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'https://komacut-frontend.onrender.com',
+  'https://comcat-frontend.onrender.com',
+  'https://comcat-frontends.onrender.com',
+  'https://netlify.app',
+  'https://vercel.app'
+];
+
+const originRegexes = [
+  /^https:\/\/([a-z0-9-]+)\.netlify\.app$/i,
+  /^https:\/\/([a-z0-9-]+)\.vercel\.app$/i,
+  /^https:\/\/([a-z0-9-]+)\.onrender\.com$/i
+];
+
 const corsOptions = {
-  origin: [
-    'https://comcat-frontend-qokb.vercel.app',
-    'http://localhost:3000', // Development
-    'http://localhost:3001', // Alternative development port
-    'http://127.0.0.1:3000', // Alternative localhost
-    'http://127.0.0.1:3001', // Alternative localhost port
-    'https://komacut-frontend.onrender.com', // Production frontend
-    'https://comcat-frontend.onrender.com', // Alternative frontend URL
-    'https://comcat-frontends.onrender.com', // Your actual frontend URL
-    'https://netlify.app', // Netlify deployments
-    'https://*.netlify.app', // All Netlify subdomains
-    'https://vercel.app', // Vercel deployments
-    'https://*.vercel.app', // All Vercel subdomains
-    'https://*.onrender.com' // All Render subdomains
-  ],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // Allow non-browser clients
+
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    if (originRegexes.some((rx) => rx.test(origin))) return callback(null, true);
+
+    return callback(new Error(`CORS not allowed for origin: ${origin}`), false);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 204
 };
 
 // Use more permissive CORS in development
@@ -82,6 +96,8 @@ if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
 } else {
   app.use(cors(corsOptions));
 }
+// Explicitly handle preflight for all routes
+app.options('*', cors(corsOptions));
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
