@@ -52,6 +52,7 @@ app.use(helmet({
 // CORS configuration for production
 const corsOptions = {
   origin: [
+    'https://comcat-frontend-qokb.vercel.app',
     'http://localhost:3000', // Development
     'http://localhost:3001', // Alternative development port
     'http://127.0.0.1:3000', // Alternative localhost
