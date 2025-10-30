@@ -105,7 +105,14 @@ app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 app.use('/uploads', express.static('uploads'));
 app.use('/test-files', express.static('test-files'));
 
-// Routes will be loaded after mongoose connection
+// Load models early so Mongoose can buffer operations before connection
+require('./models/User');
+require('./models/Inquiry');
+require('./models/Quotation');
+require('./models/Order');
+require('./models/Notification');
+
+// Routes will be loaded immediately; DB ops will buffer until connected
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -142,74 +149,63 @@ app.get('/download-test-files', (req, res) => {
   res.sendFile(path.join(__dirname, 'download-test-files.html'));
 });
 
-// MongoDB connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://damsole:Damsole@cluster0.mwqeffk.mongodb.net/komacut?retryWrites=true&w=majority';
+// Import routes immediately
+const authRoutes = require('./routes/auth');
+const inquiryRoutes = require('./routes/inquiry');
+const quotationRoutes = require('./routes/quotation');
+const orderRoutes = require('./routes/order');
+const paymentRoutes = require('./routes/payment');
+const dispatchRoutes = require('./routes/dispatch');
+const notificationRoutes = require('./routes/notifications');
+const contactRoutes = require('./routes/contact');
+const adminRoutes = require('./routes/admin');
+const pdfExtractRoutes = require('./routes/pdfExtract');
+const zipExtractRoutes = require('./routes/zipExtract');
+const dashboardRoutes = require('./routes/dashboard');
+const analyticsRoutes = require('./routes/analytics');
 
-mongoose.connect(MONGODB_URI, {
-  // Modern MongoDB driver options
-  serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
-  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
-})
-.then(() => {
-  
-  // Import models first
-  require('./models/User');
-  require('./models/Inquiry');
-  require('./models/Quotation');
-  require('./models/Order');
-  require('./models/Notification');
-  
-  // Import routes after mongoose connection
-  const authRoutes = require('./routes/auth');
-  const inquiryRoutes = require('./routes/inquiry');
-  const quotationRoutes = require('./routes/quotation');
-  const orderRoutes = require('./routes/order');
-  const paymentRoutes = require('./routes/payment');
-  const dispatchRoutes = require('./routes/dispatch');
-  const notificationRoutes = require('./routes/notifications');
-  const contactRoutes = require('./routes/contact');
-  const adminRoutes = require('./routes/admin');
-  const pdfExtractRoutes = require('./routes/pdfExtract');
-  const zipExtractRoutes = require('./routes/zipExtract');
-  const dashboardRoutes = require('./routes/dashboard');
-  const analyticsRoutes = require('./routes/analytics');
-  
-  // Use routes
-  app.use('/api/auth', authRoutes);
-  app.use('/api/inquiry', inquiryRoutes);
-  app.use('/api/quotation', quotationRoutes);
-  app.use('/api/orders', orderRoutes);
-  app.use('/api/payment', paymentRoutes);
-  app.use('/api/dispatch', dispatchRoutes);
-  app.use('/api/notifications', notificationRoutes);
-  app.use('/api/contact', contactRoutes);
-  app.use('/api/admin', adminRoutes);
-  app.use('/api/inquiry', pdfExtractRoutes);
-  app.use('/api/inquiry', zipExtractRoutes);
-  app.use('/api/dashboard', dashboardRoutes);
-  app.use('/api/analytics', analyticsRoutes);
-  
-  // Error handling middleware (must be last)
-  const errorHandler = require('./middleware/errorHandler');
-  app.use(errorHandler);
-  
-  // Create HTTP server
-  const server = http.createServer(app);
-  
-  // Initialize WebSocket service
-  websocketService.initialize(server);
-  
-  server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    console.log(`WebSocket server running on /ws`);
-    console.log(`Uploads directory: ${uploadsDir}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`MongoDB URI: ${MONGODB_URI}`);
-  });
-})
-.catch((error) => {
-  console.error('MongoDB connection error:', error);
- 
-  // Exit process if MongoDB connection fails
-  process.exit(1);
+// Use routes
+app.use('/api/auth', authRoutes);
+app.use('/api/inquiry', inquiryRoutes);
+app.use('/api/quotation', quotationRoutes);
+app.use('/api/orders', orderRoutes);
+app.use('/api/payment', paymentRoutes);
+app.use('/api/dispatch', dispatchRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/inquiry', pdfExtractRoutes);
+app.use('/api/inquiry', zipExtractRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/analytics', analyticsRoutes);
+
+// Error handling middleware (must be last)
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
+
+// Create HTTP server and start listening immediately
+const server = http.createServer(app);
+websocketService.initialize(server);
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`WebSocket server running on /ws`);
+  console.log(`Uploads directory: ${uploadsDir}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+// MongoDB connection (non-blocking)
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://damsole:Damsole@cluster0.mwqeffk.mongodb.net/komacut?retryWrites=true&w=majority';
+const connectWithRetry = () => {
+  mongoose.connect(MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+  })
+  .then(() => {
+    console.log('MongoDB connected successfully');
+  })
+  .catch((error) => {
+    console.error('MongoDB connection error:', error?.message || error);
+    setTimeout(connectWithRetry, 5000);
+  });
+};
+connectWithRetry();
