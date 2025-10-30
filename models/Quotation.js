@@ -114,7 +114,7 @@ quotationSchema.pre('save', function(next) {
 });
 
 // Index for better query performance
-quotationSchema.index({ inquiryId: 1 });
+// Note: `unique: true` on inquiryId already creates an index; avoid duplicate
 quotationSchema.index({ quotationNumber: 1 });
 quotationSchema.index({ 'customerInfo.email': 1 });
 quotationSchema.index({ status: 1 });
